@@ -50,7 +50,7 @@ uint32_t EepromSaveTimer = 0;
 uint32_t LedEffectTimer;
 uint8_t TemporaryEffectNumber;
 uint16_t LedEffectTimeDelay = 25;
-uint8_t j, k;
+uint8_t RainbowCycle, WheelPos;
 uint8_t HsvAngle = 0;
 
 bool PowerButtonState = false;
@@ -60,6 +60,40 @@ bool RandomColorsState = true;
 char auth[] = "***********************";
 char ssid[] = "***********************";
 char pass[] = "***********************";
+//==================================================================================================//
+void eeprom_starting_settings();
+void rainbow_mode_func();
+void random_colors_mode_func();
+void color_wheel_mode_func();
+void strobe_mode_func();
+void slow_motion_mode_func();
+void pixels_off();
+void set_each_pixel_color_func(byte, byte, byte, byte, byte);
+void set_all_pixels_color_func(byte, byte, byte, byte);
+//==================================================================================================//
+//==================================================================================================//
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(auth, ssid, pass);
+  pxls.begin();
+  randomSeed(analogRead(A0));
+  EEPROM.begin(FULL_EEPROM_ARRAY_SIZE);
+  eeprom_starting_settings();
+  TemporaryEffectNumber = Settings[LED_EFFECT_VAL];
+  pixels_off();
+}
+
+void loop() {
+  Blynk.run();
+  if(Settings[LED_EFFECT_VAL] != CUSTOM_MODE && PowerButtonState){
+    if(Settings[LED_EFFECT_VAL] == RAINBOW_MODE      ) rainbow_mode_func();       else
+    if(Settings[LED_EFFECT_VAL] == RANDOM_COLORS_MODE) random_colors_mode_func(); else
+    if(Settings[LED_EFFECT_VAL] == COLOR_WHEEL_MODE  ) color_wheel_mode_func();   else
+    if(Settings[LED_EFFECT_VAL] == STROBE_MODE       ) strobe_mode_func();        else
+    if(Settings[LED_EFFECT_VAL] == SLOW_MOTION_MODE  ) slow_motion_mode_func();
+  }
+}
+//==================================================================================================//
 //==================================================================================================//
 void eeprom_starting_settings(){
   if (EEPROM.read(CHECKPOINT_EEPROM_BYTE) == USER_VAL) {
@@ -78,10 +112,10 @@ void eeprom_starting_settings(){
 void set_each_pixel_color_func(byte WorkingMode, byte Brightness, byte R = Settings[RED_VAL], byte G = Settings[GREEN_VAL], byte B = Settings[BLUE_VAL]){
   for (int i = 0; i < PIXELS_NUM; i++) {
     if(WorkingMode == RAINBOW_MODE){
-      k=((uint16_t)(i*256 / PIXELS_NUM) + j);
-      if(k < 85) {           R = k*3;     G = 255 - R; B = 0;      } else
-      if(k < 170){ k -= 85;  R = 255 - B; G = 0;       B = k*3;    } else
-                 { k -= 170; R = 0;       G = k*3;     B = 255 - G;}
+      WheelPos=((uint16_t)(i*256 / PIXELS_NUM) + RainbowCycle);
+      if(WheelPos < 85) {                 R = WheelPos*3; G = 255 - R;    B = 0;         } else
+      if(WheelPos < 170){WheelPos -= 85;  R = 255 - B;    G = 0;          B = WheelPos*3;} else
+                        {WheelPos -= 170; R = 0;          G = WheelPos*3; B = 255 - G;   }
     }
     if(WorkingMode == RANDOM_COLORS_MODE){
       int8_t n = random(3);
@@ -107,16 +141,16 @@ void set_all_pixels_color_func(byte R = Settings[RED_VAL], byte G = Settings[GRE
                        map(B, 0, 255, 0, Brightness)));
   pxls.show();
 }
-
+//==================================================================================================//
 void pixels_off(){
-  set_each_pixel_color_func(R_OFF, G_OFF, B_OFF, CUSTOM_MODE);
+  set_each_pixel_color_func(CUSTOM_MODE, Settings[BRIGHTNESS_VAL], R_OFF, G_OFF, B_OFF);
   pxls.show();
 }
 //==================================================================================================//
 void rainbow_mode_func(){
   if(millis() - LedEffectTimer > LedEffectTimeDelay){
     LedEffectTimer = millis();
-    j++;
+    RainbowCycle++;
     set_each_pixel_color_func(RAINBOW_MODE, Settings[BRIGHTNESS_VAL]);
     pxls.show();
   }
@@ -171,44 +205,21 @@ void slow_motion_mode_func(){
       }
     }
     if(!AnimationReverseFlag){
-      for(int j = 0; j <= Settings[BRIGHTNESS_VAL]; j++){
-       if (j == Settings[BRIGHTNESS_VAL]) {AnimationReverseFlag = true;}
-       set_each_pixel_color_func(SLOW_MOTION_MODE, j);
+      for(int BrightnessUp = 0; BrightnessUp <= Settings[BRIGHTNESS_VAL]; BrightnessUp++){
+       if (BrightnessUp == Settings[BRIGHTNESS_VAL]) {AnimationReverseFlag = true;}
+       set_each_pixel_color_func(SLOW_MOTION_MODE, BrightnessUp);
        pxls.show();
        delay(LedEffectTimeDelay / 2);
       }
     }
     else {
-      for(int j = Settings[BRIGHTNESS_VAL]; j >= 0; j--){
-       if (j == 0) {AnimationReverseFlag = false; RandomColorsState = true;}
-       set_each_pixel_color_func(SLOW_MOTION_MODE, j);
+      for(int BrightnessDown = Settings[BRIGHTNESS_VAL]; BrightnessDown >= 0; BrightnessDown--){
+       if (BrightnessDown == 0) {AnimationReverseFlag = false; RandomColorsState = true;}
+       set_each_pixel_color_func(SLOW_MOTION_MODE, BrightnessDown);
        pxls.show();
        delay(LedEffectTimeDelay / 2);
       }
     }
-  }
-}
-//==================================================================================================//
-//==================================================================================================//
-void setup() {
-  Serial.begin(115200);
-  Blynk.begin(auth, ssid, pass);
-  pxls.begin();
-  randomSeed(analogRead(A0));
-  EEPROM.begin(FULL_EEPROM_ARRAY_SIZE);
-  eeprom_starting_settings();
-  TemporaryEffectNumber = Settings[LED_EFFECT_VAL];
-  pixels_off();
-}
-
-void loop() {
-  Blynk.run();
-  if(Settings[LED_EFFECT_VAL] != CUSTOM_MODE && PowerButtonState){
-    if(Settings[LED_EFFECT_VAL] == RAINBOW_MODE)       rainbow_mode_func();       else
-    if(Settings[LED_EFFECT_VAL] == RANDOM_COLORS_MODE) random_colors_mode_func(); else
-    if(Settings[LED_EFFECT_VAL] == COLOR_WHEEL_MODE)   color_wheel_mode_func();   else
-    if(Settings[LED_EFFECT_VAL] == STROBE_MODE)        strobe_mode_func();        else
-    if(Settings[LED_EFFECT_VAL] == SLOW_MOTION_MODE)   slow_motion_mode_func();
   }
 }
 //==================================================================================================//
@@ -233,9 +244,7 @@ BLYNK_WRITE(V3) { // POWER BUTTON
       set_each_pixel_color_func(CUSTOM_MODE, Settings[BRIGHTNESS_VAL]);
       pxls.show();
     }
-    else {
-      LedEffectTimer = millis() - LedEffectTimeDelay;
-    }
+    else { LedEffectTimer = millis() - LedEffectTimeDelay;}
   }
   else {
     TemporaryEffectNumber = Settings[LED_EFFECT_VAL];
